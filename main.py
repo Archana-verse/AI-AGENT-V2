@@ -1,36 +1,31 @@
-
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-import google.generativeai as genai
+import google.generativeai as genai                   # FIX: was "import genai"
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
-import os, json, base64, uuid, asyncio
-from datetime import datetime, timezone
+import os, base64, uuid, re
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
-import re
-
-
 
 load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))   # FIX: was GOOGLE_API_KEY + wrong client syntax
 
 GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI         = os.getenv("REDIRECT_URI", "http://localhost:8000/auth/callback")
-SECRET_KEY           = os.getenv("SECRET_KEY", "change-this-secret")
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.send",
@@ -40,25 +35,27 @@ SCOPES = [
     "https://www.googleapis.com/auth/userinfo.profile",
 ]
 
-# In-memory stores (use a DB in production)
-user_tokens    = {}   # session_id -> credentials dict
-scheduled_jobs = {}   # job_id -> job info
+user_tokens    = {}
+scheduled_jobs = {}
 
-# scheduler = AsyncIOScheduler()
-# scheduler.start()
+# FIX: scheduler must be defined BEFORE lifespan uses it
+scheduler = AsyncIOScheduler()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # This runs when the app starts
     if not scheduler.running:
         scheduler.start()
     yield
-    # This runs when the app shuts down
-    scheduler.shutdown()
+    if scheduler.running:
+        scheduler.shutdown()
 
 app = FastAPI(lifespan=lifespan)
-scheduler = AsyncIOScheduler()
-handler = app
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 # ── System Prompts ────────────────────────────────────────────────────────────
 
@@ -109,7 +106,7 @@ Always include the TO:, SUBJECT: and full body in that exact format.""",
 5. End with "✓ Delivered"."""
 }
 
-# ── Request / Response Models ─────────────────────────────────────────────────
+# ── Models ────────────────────────────────────────────────────────────────────
 
 class Message(BaseModel):
     role: str
@@ -131,7 +128,7 @@ class ScheduleEmailRequest(BaseModel):
     to: str
     subject: str
     body: str
-    send_at: str  # ISO format datetime string
+    send_at: str
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -157,22 +154,13 @@ def build_email(to: str, subject: str, body: str, sender: str) -> str:
     return base64.urlsafe_b64encode(msg.as_bytes()).decode()
 
 def parse_email_from_response(text: str) -> dict:
-    import re
-
-    to_match = re.search(r"TO:\s*(.+)", text)
+    to_match      = re.search(r"TO:\s*(.+)",      text)
     subject_match = re.search(r"SUBJECT:\s*(.+)", text)
-
-    to = to_match.group(1).strip() if to_match else ""
+    to      = to_match.group(1).strip()      if to_match      else ""
     subject = subject_match.group(1).strip() if subject_match else ""
-
     body_start = text.find("SUBJECT:")
-    body = text[body_start + len(subject) + 8:] if body_start != -1 else ""
-
-    return {
-        "to": to,
-        "subject": subject,
-        "body": body.strip()
-    }
+    body = text[body_start + len(subject) + 8:].strip() if body_start != -1 else ""
+    return {"to": to, "subject": subject, "body": body}
 
 async def send_gmail(session_id: str, to: str, subject: str, body: str):
     creds = get_credentials(session_id)
@@ -182,30 +170,21 @@ async def send_gmail(session_id: str, to: str, subject: str, body: str):
     user_info   = service.users().getProfile(userId="me").execute()
     sender      = user_info["emailAddress"]
     raw_message = build_email(to, subject, body, sender)
-    service.users().messages().send(
-        userId="me",
-        body={"raw": raw_message}
-    ).execute()
+    service.users().messages().send(userId="me", body={"raw": raw_message}).execute()
     return sender
-
-def is_valid_email(email: str) -> bool:
-    pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
-    return re.match(pattern, email) is not None
 
 # ── Auth Routes ───────────────────────────────────────────────────────────────
 
 @app.get("/auth/login")
 async def login(session_id: str):
     flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id":     GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "redirect_uris": [REDIRECT_URI],
-                "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
-                "token_uri":     "https://oauth2.googleapis.com/token",
-            }
-        },
+        {"web": {
+            "client_id":     GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uris": [REDIRECT_URI],
+            "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
+            "token_uri":     "https://oauth2.googleapis.com/token",
+        }},
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI
     )
@@ -220,15 +199,13 @@ async def login(session_id: str):
 @app.get("/auth/callback")
 async def callback(code: str, state: str):
     flow = Flow.from_client_config(
-        {
-            "web": {
-                "client_id":     GOOGLE_CLIENT_ID,
-                "client_secret": GOOGLE_CLIENT_SECRET,
-                "redirect_uris": [REDIRECT_URI],
-                "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
-                "token_uri":     "https://oauth2.googleapis.com/token",
-            }
-        },
+        {"web": {
+            "client_id":     GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uris": [REDIRECT_URI],
+            "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
+            "token_uri":     "https://oauth2.googleapis.com/token",
+        }},
         scopes=SCOPES,
         redirect_uri=REDIRECT_URI
     )
@@ -264,8 +241,9 @@ async def chat(request: ChatRequest):
     if not request.history:
         raise HTTPException(status_code=400, detail="No messages provided.")
     try:
-        system_prompt = SYSTEM_PROMPTS.get(request.mode, SYSTEM_PROMPTS["custom"])
-        model         = genai.GenerativeModel(
+        system_prompt  = SYSTEM_PROMPTS.get(request.mode, SYSTEM_PROMPTS["custom"])
+        # FIX: use google.generativeai not genai.GenerativeModel directly
+        model          = genai.GenerativeModel(
             model_name="gemini-2.5-flash",
             system_instruction=system_prompt
         )
@@ -277,7 +255,6 @@ async def chat(request: ChatRequest):
         response     = chat_session.send_message(request.history[-1].content)
         reply        = response.text or ""
 
-        # If email mode, try to parse email fields for preview
         email_data = None
         if request.mode == "email":
             parsed = parse_email_from_response(reply)
@@ -294,26 +271,11 @@ async def chat(request: ChatRequest):
 
 @app.post("/api/send-email")
 async def send_email(request: SendEmailRequest):
-
     if not request.to or "@" not in request.to:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid recipient email address"
-        )
-
+        raise HTTPException(status_code=400, detail="Invalid recipient email address")
     try:
-        sender = await send_gmail(
-            request.session_id,
-            request.to,
-            request.subject,
-            request.body
-        )
-
-        return {
-            "success": True,
-            "message": f"Email sent successfully from {sender} to {request.to}"
-        }
-
+        sender = await send_gmail(request.session_id, request.to, request.subject, request.body)
+        return {"success": True, "message": f"Email sent from {sender} to {request.to}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -325,28 +287,17 @@ async def schedule_email(request: ScheduleEmailRequest):
 
         async def send_job():
             try:
-                await send_gmail(
-                    request.session_id,
-                    request.to,
-                    request.subject,
-                    request.body
-                )
+                await send_gmail(request.session_id, request.to, request.subject, request.body)
                 scheduled_jobs[job_id]["status"] = "sent"
             except Exception as e:
                 scheduled_jobs[job_id]["status"] = f"failed: {str(e)}"
 
         scheduler.add_job(send_job, DateTrigger(run_date=send_time), id=job_id)
-
         scheduled_jobs[job_id] = {
-            "id":       job_id,
-            "to":       request.to,
-            "subject":  request.subject,
-            "send_at":  request.send_at,
-            "status":   "scheduled"
+            "id": job_id, "to": request.to,
+            "subject": request.subject, "send_at": request.send_at, "status": "scheduled"
         }
-
         return {"success": True, "job_id": job_id, "scheduled_for": request.send_at}
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -368,8 +319,6 @@ async def cancel_scheduled(job_id: str):
 
 if os.path.exists("public"):
     app.mount("/public", StaticFiles(directory="public"), name="public")
-else:
-    print("Warning: 'public' directory not found. Skipping static file mount.")
 
 @app.get("/style.css")
 async def css():

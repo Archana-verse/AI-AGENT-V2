@@ -4,9 +4,21 @@
     {
       "src": "main.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
+    {
+      "src": "/style.css",
+      "dest": "/public/style.css"
+    },
+    {
+      "src": "/agent.js",
+      "dest": "/public/agent.js"
+    },
     {
       "src": "/(.*)",
       "dest": "main.py"
