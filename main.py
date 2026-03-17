@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-import google.generativeai as genai                   # FIX: was "import genai"
+import google.generativeai as genai                   
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -21,7 +21,7 @@ load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))   # FIX: was GOOGLE_API_KEY + wrong client syntax
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))   
 
 GOOGLE_CLIENT_ID     = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
