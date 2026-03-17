@@ -3,21 +3,30 @@
   "builds": [
     {
       "src": "main.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
+      "use": "@vercel/python",
+      "config": {
+        "includeFiles": [
+          "public/**"
+        ]
+      }
     }
   ],
   "routes": [
     {
+      "src": "/api/(.*)",
+      "dest": "main.py"
+    },
+    {
+      "src": "/auth/(.*)",
+      "dest": "main.py"
+    },
+    {
       "src": "/style.css",
-      "dest": "/public/style.css"
+      "dest": "main.py"
     },
     {
       "src": "/agent.js",
-      "dest": "/public/agent.js"
+      "dest": "main.py"
     },
     {
       "src": "/(.*)",
