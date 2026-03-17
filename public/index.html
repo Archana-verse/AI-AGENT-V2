@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Workflow Agent</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <div class="header">
+    <div class="header-top">
+      <div class="agent-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+      </div>
+      <div>
+        <h2>AI Workflow Agent</h2>
+        <p>Generate &middot; Send Email &middot; Schedule &middot; Download</p>
+      </div>
+      <div class="auth-area" id="authArea">
+        <button class="auth-btn" id="authBtn" onclick="handleAuth()">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="currentColor"/></svg>
+          Connect Gmail
+        </button>
+      </div>
+    </div>
+    <div class="modes">
+      <button class="mode-btn active" onclick="setMode('email')">Write Email</button>
+      <button class="mode-btn" onclick="setMode('summary')">Summarize</button>
+      <button class="mode-btn" onclick="setMode('plan')">Action Plan</button>
+      <button class="mode-btn" onclick="setMode('report')">Draft Report</button>
+      <button class="mode-btn" onclick="setMode('custom')">Custom Task</button>
+    </div>
+  </div>
+
+  <!-- PIPELINE -->
+  <div class="pipeline" id="pipeline">
+    <div class="step"><span class="step-badge" id="s1">Understand</span></div>
+    <span class="step-arrow">&#8250;</span>
+    <div class="step"><span class="step-badge" id="s2">Analyze</span></div>
+    <span class="step-arrow">&#8250;</span>
+    <div class="step"><span class="step-badge" id="s3">Generate</span></div>
+    <span class="step-arrow">&#8250;</span>
+    <div class="step"><span class="step-badge" id="s4">Refine</span></div>
+    <span class="step-arrow">&#8250;</span>
+    <div class="step"><span class="step-badge" id="s5">Deliver</span></div>
+  </div>
+
+  <div class="messages" id="messages">
+    <div class="msg">
+      <div class="avatar ai">AI</div>
+      <div class="bubble ai">
+        <div class="thinking">Agent ready</div>
+        Hello! I'm your AI Workflow Agent. I can write and <strong>send real emails via Gmail</strong>, generate content, create action plans, and more.<br><br>
+        Connect your Gmail account above to unlock email sending, then describe your task below!
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="emailModal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Email Preview</h3>
+        <button class="modal-close" onclick="closeEmailModal()">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="email-field">
+          <label>To</label>
+          <input type="email" id="emailTo" placeholder="recipient@example.com" />
+          <div id="emailStatus" style="font-size:12px;margin-top:4px;"></div>
+        </div>
+        <div class="email-field">
+          <label>Subject</label>
+          <input type="text" id="emailSubject" placeholder="Email subject" />
+        </div>
+        <div class="email-field">
+          <label>Body</label>
+          <textarea id="emailBody" rows="8"></textarea>
+        </div>
+
+        <!-- Schedule section -->
+        <div class="schedule-toggle">
+          <label class="toggle-label">
+            <input type="checkbox" id="scheduleToggle" onchange="toggleSchedule()" />
+            Schedule for later
+          </label>
+        </div>
+        <div class="schedule-section" id="scheduleSection" style="display:none">
+          <div class="email-field">
+            <label>Send at</label>
+            <input type="datetime-local" id="scheduleTime" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeEmailModal()">Cancel</button>
+        <button class="btn-primary" id="sendEmailBtn" onclick="sendEmail()">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/></svg>
+          Send Now
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scheduled-panel" id="scheduledPanel" style="display:none">
+    <div class="panel-header">
+      <span>Scheduled Emails</span>
+      <button onclick="toggleScheduledPanel()">&#10005;</button>
+    </div>
+    <div id="scheduledList"></div>
+  </div>
+
+  <div class="input-area">
+    <div class="quick-btns" id="quickBtns">
+      <button class="quick-btn" onclick="useQuick(this)">Write a follow-up email after a job interview</button>
+      <button class="quick-btn" onclick="useQuick(this)">Summarize my internship into 3 bullet points</button>
+      <button class="quick-btn" onclick="useQuick(this)">Create a 30-day Hugging Face learning plan</button>
+    </div>
+    <div class="input-row">
+      <textarea id="inp" placeholder="Describe your task..." rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="white"/></svg>
+      </button>
+    </div>
+    <div class="bottom-bar">
+      <button class="tool-btn" id="scheduledBtn" onclick="toggleScheduledPanel()" style="display:none">
+        📅 Scheduled
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script src="agent.js"></script>
+</body>
+</html>
