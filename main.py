@@ -21,6 +21,7 @@ from apscheduler.triggers.date import DateTrigger
 import re
 
 
+
 load_dotenv()
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -366,7 +367,10 @@ async def cancel_scheduled(job_id: str):
 
 # ── Serve Frontend ────────────────────────────────────────────────────────────
 
-app.mount("/public", StaticFiles(directory="public"), name="public")
+if os.path.exists("public"):
+    app.mount("/public", StaticFiles(directory="public"), name="public")
+else:
+    print("Warning: 'public' directory not found. Skipping static file mount.")
 
 @app.get("/style.css")
 async def css():
