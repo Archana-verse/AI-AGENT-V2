@@ -1,3 +1,5 @@
+from sched import scheduler
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
@@ -13,6 +15,7 @@ from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 import re
@@ -41,10 +44,19 @@ SCOPES = [
 user_tokens    = {}   # session_id -> credentials dict
 scheduled_jobs = {}   # job_id -> job info
 
-scheduler = AsyncIOScheduler()
-scheduler.start()
+# scheduler = AsyncIOScheduler()
+# scheduler.start()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # This runs when the app starts
+    if not scheduler.running:
+        scheduler.start()
+    yield
+    # This runs when the app shuts down
+    scheduler.shutdown()
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
+scheduler = AsyncIOScheduler()
 handler = app
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
