@@ -1,4 +1,3 @@
-from sched import scheduler
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
